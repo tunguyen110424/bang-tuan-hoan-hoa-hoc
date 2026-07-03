@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vũ Trụ Nguyên Tử 3D - Tinh Chỉnh Nâng Cao</title>
+    <style>
+        body { margin: 0; padding: 0; background-color: #0d0f14; color: #fff; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; user-select: none; }
+        
+        /* Sidebar bảng thông số bên trái */
+        #left-sidebar { 
+            position: absolute; top: 15px; left: 15px; z-index: 100; 
+            background: rgba(18, 22, 31, 0.95); padding: 18px; width: 320px;
+            max-height: 90vh; overflow-y: auto;
+            border-radius: 12px; border: 1px solid #475569;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+        }
+        #left-sidebar h2 { font-size: 16px; color: #38bdf8; margin: 0 0 5px 0; text-align: center; letter-spacing: 0.5px; }
+        #left-sidebar p { font-size: 11px; color: #94a3b8; text-align: center; margin: 0 0 12px 0; }
+        
+        .stat-group { border-top: 1px solid #334155; padding-top: 8px; font-size: 13px; line-height: 1.8; }
+        .row-item { display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,0.04); padding: 4px 0; align-items: center; }
+        .val-item { font-weight: 600; color: #f1f5f9; }
+
+        /* Bảng điều khiển tốc độ đồng bộ tích hợp hạt nhân và electron */
+        .speed-control-panel {
+            margin-top: 12px; border-top: 2px solid #475569; padding-top: 12px;
+        }
+        .speed-title { font-size: 13px; color: #fbbf24; font-weight: bold; margin-bottom: 8px; text-align: center; letter-spacing: 0.5px; }
+        
+        .speed-monitor-box {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px;
+        }
+        .monitor-card {
+            background: rgba(0, 0, 0, 0.5); border: 1px solid #334155; border-radius: 6px;
+            padding: 6px; text-align: center; font-family: monospace;
+        }
+        .monitor-card label { font-size: 10px; color: #94a3b8; display: block; margin-bottom: 2px; }
+        .monitor-card span { font-size: 12px; color: #4ade80; font-weight: bold; }
+
+        .control-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+        .control-row label { font-size: 11px; color: #cbd5e1; font-weight: 500; }
+        .speed-slider { width: 100%; cursor: pointer; accent-color: #fbbf24; margin: 4px 0 8px 0; }
+        .speed-input {
+            width: 100%; background: #1e293b; border: 1px solid #475569; color: #fff;
+            padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; font-family: monospace;
+        }
+        
+        /* Thanh lọc phân loại nhóm - ĐÃ TÍCH HỢP VÀO TRONG PTABLE */
+        .filter-bar-inside {
+            display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 12px;
+            padding-bottom: 10px; border-bottom: 1px solid #334155;
+        }
+        .filter-btn {
+            padding: 4px 8px; font-size: 10.5px; font-weight: bold; border-radius: 4px;
+            cursor: pointer; border: 1px solid rgba(255,255,255,0.15); color: #fff; transition: all 0.2s;
+        }
+        .filter-btn:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(255,255,255,0.2); }
+        .filter-btn.active-filter { border: 2px solid #fff !important; transform: scale(1.03); }
+
+        /* Nút ẩn/hiện bảng tuần hoàn nằm cố định ở góc dưới */
+        #toggle-ptable-btn {
+            position: absolute; bottom: 15px; left: 15px; z-index: 110;
+            background: #fbbf24; color: #0d0f14; border: none; padding: 10px 16px;
+            font-size: 12px; font-weight: bold; border-radius: 8px; cursor: pointer;
+            box-shadow: 0 4px 15px rgba(251, 191, 36, 0.3); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        #toggle-ptable-btn:hover { background: #f59e0b; transform: scale(1.05); }
+
+        /* Container chứa bảng tuần hoàn - Hỗ trợ hiệu ứng trượt mượt */
+        #ptable-container {
+            position: absolute; bottom: 15px; left: 160px; right: 15px; z-index: 100;
+            background: rgba(13, 17, 26, 0.98); padding: 15px; border-radius: 12px;
+            border: 1px solid #475569; box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s;
+            transform: translateY(0); opacity: 1;
+        }
+        /* Class kích hoạt trạng thái ẩn lặn xuống mép dưới màn hình */
+        #ptable-container.hidden-mode {
+            transform: translateY(120%); opacity: 0; pointer-events: none;
+        }
+
+        /* Lưới ma trận nguyên tố kích thước lớn */
+        .ptable-grid {
+            display: grid; grid-template-columns: repeat(18, 1fr); gap: 4px;
+        }
+        .cell-element {
+            background: #1e293b; border: 1px solid #334155; border-radius: 4px;
+            aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; 
+            justify-content: center; cursor: pointer; transition: all 0.15s ease; 
+            position: relative; font-size: 13px; font-weight: bold; min-height: 36px;
+        }
+        .cell-element:hover { transform: scale(1.35); z-index: 200; box-shadow: 0 0 15px #fff !important; }
+        .cell-element.selected-active { border: 2.5px solid #ffffff !important; box-shadow: 0 0 15px currentColor; transform: scale(1.1); z-index: 150; }
+        .cell-element .z-idx { font-size: 8px; position: absolute; top: 2px; left: 3px; opacity: 0.8; font-weight: normal; }
+        .cell-element.dimmed { opacity: 0.12; filter: grayscale(90%); }
+
+        /* Khung phân màu theo nhóm */
+        .alkali { background: #1e3a8a; color: #38bdf8; }         
+        .alkaline { background: #7c2d12; color: #f97316; }       
+        .transition { background: #581c87; color: #c084fc; }     
+        .post-transition { background: #064e3b; color: #34d399; }
+        .metalloid { background: #78350f; color: #fbbf24; }       
+        .nonmetal { background: #1e40af; color: #60a5fa; }        
+        .noble { background: #701a75; color: #f472b6; }           
+        .lantan { background: #115e59; color: #2dd4bf; }          
+        .actini { background: #9a3412; color: #fb923c; }          
+        .unknown { background: #374151; color: #9ca3af; }         
+        .ghost { pointer-events: none; opacity: 0; background: transparent; border: none; }
+        
+        #hint-text { font-size: 10px; color: #64748b; margin-top: 8px; text-align: center; }
+    </style>
+</head>
+<body>
+
+    <!-- Bảng thông tin chi tiết góc trái -->
+    <div id="left-sidebar">
+        <h2>THÔNG TIN CHI TIẾT</h2>
+        <p>Bấm hạt nhân để phân tích dữ liệu vỏ nguyên tử</p>
+        
+        <div class="stat-group">
+            <div class="row-item"><span>Kí hiệu hóa học:</span> <span class="val-item" id="lblSym" style="color:#38bdf8; font-size:16px;">-</span></div>
+            <div class="row-item"><span>Tên nguyên tố (EN):</span> <span class="val-item" id="lblName" style="color:#fbbf24;">-</span></div>
+            <div class="row-item"><span>Số hiệu nguyên tử (Z):</span> <span class="val-item" id="lblZ">-</span></div>
+            <div class="row-item"><span>Phân loại cấu trúc:</span> <span class="val-item" id="lblClass" style="color:#34d399;">-</span></div>
+            <div class="row-item"><span>Nguyên tử khối:</span> <span class="val-item" id="lblMass">-</span></div>
+            <div class="row-item"><span>Độ âm điện:</span> <span class="val-item" id="lblElectro">-</span></div>
+            <div class="row-item"><span>Khối lượng riêng:</span> <span class="val-item" id="lblDensity">-</span></div>
+            <div class="row-item"><span>Phân khối Orbital:</span> <span class="val-item" id="lblBlock" style="text-transform: uppercase;">-</span></div>
+            <div class="row-item" style="flex-direction: column; align-items: flex-start; border-bottom: none;">
+                <span>Cấu hình Electron:</span> 
+                <span class="val-item" id="lblConfig" style="font-size:11.5px; color:#f472b6; word-break: break-all; margin-top: 2px;">-</span>
+            </div>
+            <div class="row-item" style="margin-top:5px; border-top: 1px dashed #334155;">
+                <span>Cơ cấu (Proton/Neutron):</span> <span class="val-item" id="lblPN" style="font-size:11px; color:#cbd5e1;">-</span>
+            </div>
+        </div>
+
+        <!-- BẢNG ĐIỀU KHIỂN TỐC ĐỘ DI CHUYỂN HẠT TÍCH HỢP TỈ LỆ THUẬN -->
+        <div class="speed-control-panel">
+            <div class="speed-title">HỆ THỐNG VẬN TỐC LƯỢNG TỬ</div>
+            
+            <!-- Màn hình giám sát vận tốc song song -->
+            <div class="speed-monitor-box">
+                <div class="monitor-card">
+                    <label>Vận tốc Electron</label>
+                    <span id="vElectronShow">0 m/s</span>
+                </div>
+                <div class="monitor-card">
+                    <label>Vận tốc Hạt nhân</label>
+                    <span id="vNucleusShow">0 m/s</span>
+                </div>
+            </div>
+
+            <!-- Cần gạt điều chỉnh chung theo Tỉ lệ phần trăm % -->
+            <div class="control-row">
+                <label>Điều chỉnh chung: <span id="percentLabel" style="color:#fbbf24; font-weight:bold;">100%</span> Tốc độ chuẩn</label>
+                <input type="range" id="globalSpeedSlider" class="speed-slider" min="0" max="200" step="1" value="100">
+            </div>
+
+            <!-- Ô nhập số riêng biệt cho từng loại hạt (Tự đồng bộ tỉ lệ thuận) -->
+            <div class="control-row">
+                <label>Nhập vận tốc Electron (m/s):</label>
+                <input type="number" id="inputVElectron" class="speed-input" value="2180000">
+            </div>
+
+            <div class="control-row">
+                <label>Nhập vận tốc Hạt nhân (vòng/s):</label>
+                <input type="number" id="inputVNucleus" class="speed-input" value="12">
+            </div>
+        </div>
+
+        <div id="hint-text">MC Chuột trái xoay mô hình • Cuộn chuột để zoom</div>
+    </div>
+
+    <!-- Nút kích hoạt Trượt Ẩn / Hiện Bảng tuần hoàn -->
+    <button id="toggle-ptable-btn" onclick="togglePtableBoard()">Ẩn Bảng Tuần Hoàn</button>
+
+    <!-- Khung Bảng tuần hoàn Ptable Cải tiến kích thước lớn -->
+    <div id="ptable-container">
+        <!-- ĐÃ TÍCH HỢP THANH PHÂN LOẠI VÀ O ĐÂY -->
+        <div class="filter-bar-inside">
+            <button class="filter-btn" style="background:#475569;" onclick="filterCategory('all', event)">Tất cả nhóm</button>
+            <button class="filter-btn alkali" onclick="filterCategory('kim loại kiềm', event)">Kim loại kiềm</button>
+            <button class="filter-btn alkaline" onclick="filterCategory('kim loại kiềm thổ', event)">Kiềm thổ</button>
+            <button class="filter-btn transition" onclick="filterCategory('kim loại chuyển tiếp', event)">Chuyển tiếp</button>
+            <button class="filter-btn post-transition" onclick="filterCategory('kim loại hậu chuyển tiếp', event)">Hậu chuyển tiếp</button>
+            <button class="filter-btn metalloid" onclick="filterCategory('á kim', event)">Á kim</button>
+            <button class="filter-btn nonmetal" onclick="filterCategory('phi kim', event)">Phi kim</button>
+            <button class="filter-btn noble" onclick="filterCategory('khí hiếm', event)">Khí hiếm</button>
+            <button class="filter-btn lantan" onclick="filterCategory('lantan', event)">Lantan</button>
+            <button class="filter-btn actini" onclick="filterCategory('actini', event)">Actini</button>
+            <button class="filter-btn unknown" onclick="filterCategory('đặc tính không xác định', event)">K.Xác Định</button>
+        </div>
+        
+        <!-- Lưới nguyên tố -->
+        <div class="ptable-grid" id="elementGrid"></div>
+    </div>
+
+    <!-- Gọi thư viện engine đồ họa 3D -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        const tableData118 = {
+            "H":{"name":"Hydrogen","z":1,"p":1,"n":0,"mass":"1,008","class":"phi kim","block":"s","config":"1s¹","electro":"2,2","density":"0,00009","row":1,"col":1},
+            "He":{"name":"Helium","z":2,"p":2,"n":2,"mass":"4,003","class":"khí hiếm","block":"s","config":"1s²","electro":"-","density":"0,00018","row":1,"col":18},
+            "Li":{"name":"Lithium","z":3,"p":3,"n":4,"mass":"6,941","class":"kim loại kiềm","block":"s","config":"[He] 2s¹","electro":"0,98","density":"0,534","row":2,"col":1},
+            "Be":{"name":"Beryllium","z":4,"p":4,"n":5,"mass":"9,012","class":"kim loại kiềm thổ","block":"s","config":"[He] 2s²","electro":"1,57","density":"1,85","row":2,"col":2},
+            "B":{"name":"Boron","z":5,"p":5,"n":6,"mass":"10,81","class":"á kim","block":"p","config":"[He] 2s² 2p¹","electro":"2,04","density":"2,34","row":2,"col":13},
+            "C":{"name":"Carbon","z":6,"p":6,"n":6,"mass":"12,011","class":"phi kim","block":"p","config":"[He] 2s² 2p²","electro":"2,55","density":"2,27","row":2,"col":14},
+            "N":{"name":"Nitrogen","z":7,"p":7,"n":7,"mass":"14,007","class":"phi kim","block":"p","config":"[He] 2s² 2p³","electro":"3,04","density":"0,00125","row":2,"col":15},
+            "O":{"name":"Oxygen","z":8,"p":8,"n":8,"mass":"16,0","class":"phi kim","block":"p","config":"[He] 2s² 2p⁴","electro":"3,44","density":"0,00143","row":2,"col":16},
+            "F":{"name":"Fluorine","z":9,"p":9,"n":10,"mass":"18,998","class":"phi kim","block":"p","config":"[He] 2s² 2p⁵","electro":"3,98","density":"0,0017","row":2,"col":17},
+            "Ne":{"name":"Neon","z":10,"p":10,"n":10,"mass":"20,18","class":"khí hiếm","block":"p","config":"[He] 2s² 2p⁶","electro":"-","density":"0,0009","row":2,"col":18},
+            "Na":{"name":"Sodium","z":11,"p":11,"n":12,"mass":"22,99","class":"kim loại kiềm","block":"s","config":"[Ne] 3s¹","electro":"0,93","density":"0,971","row":3,"col":1},
+            "Mg":{"name":"Magnesium","z":12,"p":12,"n":12,"mass":"24,305","class":"kim loại kiềm thổ","block":"s","config":"[Ne] 3s²","electro":"1,31","density":"1,738","row":3,"col":2},
+            "Al":{"name":"Aluminium","z":13,"p":13,"n":14,"mass":"26,982","class":"kim loại hậu chuyển tiếp","block":"p","config":"[Ne] 3s² 3p¹","electro":"1,61","density":"2,7","row":3,"col":13},
+            "Si":{"name":"Silicon","z":14,"p":14,"n":14,"mass":"28,086","class":"á kim","block":"p","config":"[Ne] 3s² 3p²","electro":"1,9","density":"2,33","row":3,"col":14},
+            "P":{"name":"Phosphorus","z":15,"p":15,"n":16,"mass":"30,974","class":"phi kim","block":"p","config":"[Ne] 3s² 3p³","electro":"2,19","density":"1,82","row":3,"col":15},
+            "S":{"name":"Sulfur","z":16,"p":16,"n":16,"mass":"32,065","class":"phi kim","block":"p","config":"[Ne] 3s² 3p⁴","electro":"2,58","density":"2,07","row":3,"col":16},
+            "Cl":{"name":"Chlorine","z":17,"p":17,"n":18,"mass":"35,453","class":"phi kim","block":"p","config":"[Ne] 3s² 3p⁵","electro":"3,16","density":"0,00321","row":3,"col":17},
+            "Ar":{"name":"Argon","z":18,"p":18,"n":22,"mass":"39,948","class":"khí hiếm","block":"p","config":"[Ne] 3s² 3p⁶","electro":"-","density":"0,00178","row":3,"col":18},
+            "K":{"name":"Potassium","z":19,"p":19,"n":20,"mass":"39,098","class":"kim loại kiềm","block":"s","config":"[Ar] 4s¹","electro":"0,82","density":"0,862","row":4,"col":1},
+            "Ca":{"name":"Calcium","z":20,"p":20,"n":20,"mass":"40,078","class":"kim loại kiềm thổ","block":"s","config":"[Ar] 4s²","electro":"1,0","density":"1,54","row":4,"col":2},
+            "Sc":{"name":"Scandium","z":21,"p":21,"n":24,"mass":"44,956","class":"kim loại chuyển tiếp","block":"d","config":"[Ar] 3d¹ 4s²","electro":"1,36","density":"2,99","row":4,"col":3},
+            "Ti":{"name":"Titanium","z":22,"p":22,"n":26,"mass":"47,867","class":"kim loại chuyển tiếp","block":"d","config":"[Ar] 3d² 4s²","electro":"1,54","density":"4,54","row":4,"col":4},
+            "V":{"name":"Vanadium","z":23,"p":23,"n":28,"mass":"50,942","class":"kim loại chuyển tiếp","block":"d","config":"[Ar] 3d³ 4s²","electro":"1,63","density":"6,11","row":4,"col":5},
+            "Cr":{"name":"Chromium","z":24,"p":24,"n":28,"mass":"51,996","class":"kim loại chuyển tiếp","block":"d","config":"[Ar] 3d⁵ 4s¹","electro":"1,66","density":"7,15","row":4,"col":6},
+            "Mn":{"name":"Manganese","z":25,"p":25,"n":30,"mass":"54,938","class":"kim loại chuyển tiếp","block":"d","config":"[Ar] 3d⁵ 4s²","electro":"1,55","density":"7,44","row":4,"col":7},
+            "Fe":{"name":"Iron","z":26,"p":26,"n":30,"mass":"55,845","class":"kim loại chuyển tiếp","block":"d","config":"[Ar] 3d⁶ 4s²","electro":"1,83","density":"7,87","row":4,"col":8},
+            "Co":{"name":"Cobalt","z":27,"p":27,"n":32,"mass":"58,933","class":"kim loại chuyển tiếp","block":"d","config":"[Ar] 3d⁷ 4s²","electro":"1,88","density":"8,9","row":4,"col":9},
+            "Ni":{"name":"Nickel","z":28,"p":28,"n":31,"mass":"58,693","class":"kim loại chuyển tiếp","block":"d","config":"[Ar] 3d⁸ 4s²","electro":"1,91","density":"8,91","row":4,"col":10},
+            "Cu":{"name":"Copper","z":29,"p":29,"n":35,"mass":"63,546","class":"kim loại chuyển tiếp","block":"d","config":"[Ar] 3d¹⁰ 4s¹","electro":"1,9","density":"8,96","row":4,"col":11},
+            "Zn":{"name":"Zinc","z":30,"p":30,"n":35,"mass":"65,38","class":"kim loại chuyển tiếp","block":"d","config":"[Ar] 3d¹⁰ 4s²","electro":"1,65","density":"7,13","row":4,"col":12},
+            "Ga":{"name":"Gallium","z":31,"p":31,"n":39,"mass":"69,723","class":"kim loại hậu chuyển tiếp","block":"p","config":"[Ar] 3d¹⁰ 4s² 4p¹","electro":"1,81","density":"5,91","row":4,"col":13},
+            "Ge":{"name":"Germanium","z":32,"p":32,"n":41,"mass":"72,63","class":"á kim","block":"p","config":"[Ar] 3d¹⁰ 4s² 4p²","electro":"2,01","density":"5,32","row":4,"col":14},
+            "As":{"name":"Arsenic","z":33,"p":33,"n":42,"mass":"74,922","class":"á kim","block":"p","config":"[Ar] 3d¹⁰ 4s² 4p³","electro":"2,18","density":"5,78","row":4,"col":15},
+            "Se":{"name":"Selenium","z":34,"p":34,"n":45,"mass":"78,971","class":"phi kim","block":"p","config":"[Ar] 3d¹⁰ 4s² 4p⁴","electro":"2,55","density":"4,81","row":4,"col":16},
+            "Br":{"name":"Bromine","z":35,"p":35,"n":45,"mass":"79,904","class":"phi kim","block":"p","config":"[Ar] 3d¹⁰ 4s² 4p⁵","electro":"2,96","density":"3,12","row":4,"col":17},
+            "Kr":{"name":"Krypton","z":36,"p":36,"n":48,"mass":"83,798","class":"khí hiếm","block":"p","config":"[Ar] 3d¹⁰ 4s² 4p⁶","electro":"3,0","density":"0,00375","row":4,"col":18},
+            "Rb":{"name":"Rubidium","z":37,"p":37,"n":48,"mass":"85,468","class":"kim loại kiềm","block":"s","config":"[Kr] 5s¹","electro":"0,82","density":"1,53","row":5,"col":1},
+            "Sr":{"name":"Strontium","z":38,"p":38,"n":50,"mass":"87,62","class":"kim loại kiềm thổ","block":"s","config":"[Kr] 5s²","electro":"0,95","density":"2,64","row":5,"col":2},
+            "Y":{"name":"Yttrium","z":39,"p":39,"n":50,"mass":"88,906","class":"kim loại chuyển tiếp","block":"d","config":"[Kr] 4d¹ 5s²","electro":"1,22","density":"4,47","row":5,"col":3},
+            "Zr":{"name":"Zirconium","z":40,"p":40,"n":51,"mass":"91,224","class":"kim loại chuyển tiếp","block":"d","config":"[Kr] 4d² 5s²","electro":"1,33","density":"6,51","row":5,"col":4},
+            "Nb":{"name":"Niobium","z":41,"p":41,"n":52,"mass":"92,906","class":"kim loại chuyển tiếp","block":"d","config":"[Kr] 4d⁴ 5s¹","electro":"1,6","density":"8,57","row":5,"col":5},
+            "Mo":{"name":"Molybdenum","z":42,"p":42,"n":54,"mass":"95,95","class":"kim loại chuyển tiếp","block":"d","config":"[Kr] 4d⁵ 5s¹","electro":"2,16","density":"10,22","row":5,"col":6},
+            "Tc":{"name":"Technetium","z":43,"p":43,"n":55,"mass":"98,0","class":"kim loại chuyển tiếp","block":"d","config":"[Kr] 4d⁵ 5s²","electro":"1,9","density":"11,5","row":5,"col":7},
+            "Ru":{"name":"Ruthenium","z":44,"p":44,"n":57,"mass":"101,07","class":"kim loại chuyển tiếp","block":"d","config":"[Kr] 4d⁷ 5s¹","electro":"2,2","density":"12,37","row":5,"col":8},
+            "Rh":{"name":"Rhodium","z":45,"p":45,"n":58,"mass":"102,906","class":"kim loại chuyển tiếp","block":"d","config":"[Kr] 4d⁸ 5s¹","electro":"2,28","density":"12,41","row":5,"col":9},
+            "Pd":{"name":"Palladium","z":46,"p":46,"n":60,"mass":"106,42","class":"kim loại chuyển tiếp","block":"d","config":"[Kr] 4d¹⁰","electro":"2,2","density":"12,02","row":5,"col":10},
+            "Ag":{"name":"Silver","z":47,"p":47,"n":61,"mass":"107,868","class":"kim loại chuyển tiếp","block":"d","config":"[Kr] 4d¹⁰ 5s¹","electro":"2,2","density":"10,5","row":5,"col":11},
+            "Cd":{"name":"Cadmium","z":48,"p":48,"n":64,"mass":"112,414","class":"kim loại chuyển tiếp","block":"d","config":"[Kr] 4d⁰ 5s²","electro":"1,69","density":"8,69","row":5,"col":12},
+            "In":{"name":"Indium","z":49,"p":49,"n":66,"mass":"114,818","class":"kim loại hậu chuyển tiếp","block":"p","config":"[Kr] 4d¹⁰ 5s² 5p¹","electro":"1,78","density":"7,31","row":5,"col":13},
+            "Sn":{"name":"Tin","z":50,"p":50,"n":69,"mass":"118,71","class":"kim loại hậu chuyển tiếp","block":"p","config":"[Kr] 4d¹⁰ 5s² 5p²","electro":"1,96","density":"7,29","row":5,"col":14},
+            "Sb":{"name":"Antimony","z":51,"p":51,"n":71,"mass":"121,76","class":"á kim","block":"p","config":"[Kr] 4d¹⁰ 5s² 5p³","electro":"2,05","density":"6,68","row":5,"col":15},
+            "Te":{"name":"Tellurium","z":52,"p":52,"n":76,"mass":"127,6","class":"á kim","block":"p","config":"[Kr] 4d¹⁰ 5s² 5p⁴","electro":"2,1","density":"6,24","row":5,"col":16},
+            "I":{"name":"Iodine","z":53,"p":53,"n":74,"mass":"126,904","class":"phi kim","block":"p","config":"[Kr] 4d¹⁰ 5s² 5p⁵","electro":"2,66","density":"4,93","row":5,"col":17},
+            "Xe":{"name":"Xenon","z":54,"p":54,"n":77,"mass":"131,293","class":"khí hiếm","block":"p","config":"[Kr] 4d¹⁰ 5s² 5p⁶","electro":"2,6","density":"0,00589","row":5,"col":18},
+            "Cs":{"name":"Cesium","z":55,"p":55,"n":78,"mass":"132,905","class":"kim loại kiềm","block":"s","config":"[Xe] 6s¹","electro":"0,79","density":"1,87","row":6,"col":1},
+            "Ba":{"name":"Barium","z":56,"p":56,"n":81,"mass":"137,327","class":"kim loại kiềm thổ","block":"s","config":"[Xe] 6s²","electro":"0,89","density":"3,59","row":6,"col":2},
+            "La":{"name":"Lanthanum","z":57,"p":57,"n":82,"mass":"138,905","class":"lantan","block":"d","config":"[Xe] 5d¹ 6s²","electro":"1,1","density":"6,15","row":6,"col":3},
+            "Ce":{"name":"Cerium","z":58,"p":58,"n":82,"mass":"140,116","class":"lantan","block":"f","config":"[Xe] 4f¹ 5d¹ 6s²","electro":"1,12","density":"6,77","row":9,"col":3},
+            "Pr":{"name":"Praseodymium","z":59,"p":59,"n":82,"mass":"140,908","class":"lantan","block":"f","config":"[Xe] 4f³ 6s²","electro":"1,13","density":"6,77","row":9,"col":4},
+            "Nd":{"name":"Neodymium","z":60,"p":60,"n":84,"mass":"144,242","class":"lantan","block":"f","config":"[Xe] 4f⁴ 6s²","electro":"1,14","density":"7,01","row":9,"col":5},
+            "Pm":{"name":"Promethium","z":61,"p":61,"n":84,"mass":"145,0","class":"lantan","block":"f","config":"[Xe] 4f⁵ 6s²","electro":"1,13","density":"7,26","row":9,"col":6},
+            "Sm":{"name":"Samarium","z":62,"p":62,"n":88,"mass":"150,36","class":"lantan","block":"f","config":"[Xe] 4f⁶ 6s²","electro":"1,17","density":"7,52","row":9,"col":7},
+            "Eu":{"name":"Europium","z":63,"p":63,"n":89,"mass":"151,964","class":"lantan","block":"f","config":"[Xe] 4f⁷ 6s²","electro":"1,2","density":"5,24","row":9,"col":8},
+            "Gd":{"name":"Gadolinium","z":64,"p":64,"n":93,"mass":"157,25","class":"lantan","block":"f","config":"[Xe] 4f⁷ 5d¹ 6s²","electro":"1,2","density":"7,9","row":9,"col":9},
+            "Tb":{"name":"Terbium","z":65,"p":65,"n":94,"mass":"158,925","class":"lantan","block":"f","config":"[Xe] 4f⁹ 6s²","electro":"1,2","density":"8,23","row":9,"col":10},
+            "Dy":{"name":"Dysprosium","z":66,"p":66,"n":97,"mass":"162,5","class":"lantan","block":"f","config":"[Xe] 4f¹⁰ 6s²","electro":"1,22","density":"8,55","row":9,"col":11},
+            "Ho":{"name":"Holmium","z":67,"p":67,"n":98,"mass":"164,93","class":"lantan","block":"f","config":"[Xe] 4f¹¹ 6s²","electro":"1,23","density":"8,8","row":9,"col":12},
+            "Er":{"name":"Erbium","z":68,"p":68,"n":99,"mass":"167,259","class":"lantan","block":"f","config":"[Xe] 4f¹² 6s²","electro":"1,24","density":"9,07","row":9,"col":13},
+            "Tm":{"name":"Thulium","z":69,"p":69,"n":100,"mass":"168,934","class":"lantan","block":"f","config":"[Xe] 4f¹³ 6s²","electro":"1,25","density":"9,32","row":9,"col":14},
+            "Yb":{"name":"Ytterbium","z":70,"p":70,"n":103,"mass":"173,054","class":"lantan","block":"f","config":"[Xe] 4f¹⁴ 6s²","electro":"1,1","density":"6,9","row":9,"col":15},
+            "Lu":{"name":"Lutetium","z":71,"p":71,"n":104,"mass":"174,967","class":"lantan","block":"d","config":"[Xe] 4f¹⁴ 5d¹ 6s²","electro":"1,27","density":"9,84","row":9,"col":16},
+            "Hf":{"name":"Hafnium","z":72,"p":72,"n":106,"mass":"178,49","class":"kim loại chuyển tiếp","block":"d","config":"[Xe] 4f¹⁴ 5d² 6s²","electro":"1,3","density":"13,31","row":6,"col":4},
+            "Ta":{"name":"Tantalum","z":73,"p":73,"n":108,"mass":"180,948","class":"kim loại chuyển tiếp","block":"d","config":"[Xe] 4f¹⁴ 5d³ 6s²","electro":"1,5","density":"16,65","row":6,"col":5},
+            "W":{"name":"Tungsten","z":74,"p":74,"n":110,"mass":"183,84","class":"kim loại chuyển tiếp","block":"d","config":"[Xe] 4f¹⁴ 5d⁴ 6s²","electro":"2,36","density":"19,25","row":6,"col":6},
+            "Re":{"name":"Rhenium","z":75,"p":75,"n":111,"mass":"186,207","class":"kim loại chuyển tiếp","block":"d","config":"[Xe] 4f¹⁴ 5d⁵ 6s²","electro":"1,9","density":"21,02","row":6,"col":7},
+            "Os":{"name":"Osmium","z":76,"p":76,"n":114,"mass":"190,23","class":"kim loại chuyển tiếp","block":"d","config":"[Xe] 4f¹⁴ 5d⁶ 6s²","electro":"2,2","density":"22,61","row":6,"col":8},
+            "Ir":{"name":"Iridium","z":77,"p":77,"n":115,"mass":"192,217","class":"kim loại chuyển tiếp","block":"d","config":"[Xe] 4f¹⁴ 5d⁷ 6s²","electro":"2,2","density":"22,56","row":6,"col":9},
+            "Pt":{"name":"Platinum","z":78,"p":78,"n":117,"mass":"195,084","class":"kim loại chuyển tiếp","block":"d","config":"[Xe] 4f¹⁴ 5d⁹ 6s¹","electro":"2,28","density":"21,46","row":6,"col":10},
+            "Au":{"name":"Gold","z":79,"p":79,"n":118,"mass":"196,967","class":"kim loại chuyển tiếp","block":"d","config":"[Xe] 4f¹⁴ 5d⁰ 6s¹","electro":"2,54","density":"19,32","row":6,"col":11},
+            "Hg":{"name":"Mercury","z":80,"p":80,"n":121,"mass":"200,592","class":"kim loại chuyển tiếp","block":"d","config":"[Xe] 4f¹⁴ 5d¹⁰ 6s²","electro":"2,0","density":"13,55","row":6,"col":12},
+            "Tl":{"name":"Thallium","z":81,"p":81,"n":123,"mass":"204,38","class":"kim loại hậu chuyển tiếp","block":"p","config":"[Xe] 4f¹⁴ 5d¹⁰ 6s² 6p¹","electro":"1,62","density":"11,85","row":6,"col":13},
+            "Pb":{"name":"Lead","z":82,"p":82,"n":125,"mass":"207,2","class":"kim loại hậu chuyển tiếp","block":"p","config":"[Xe] 4f¹⁴ 5d¹⁰ 6s² 6p²","electro":"2,33","density":"11,34","row":6,"col":14},
+            "Bi":{"name":"Bismuth","z":83,"p":83,"n":126,"mass":"208,98","class":"kim loại hậu chuyển tiếp","block":"p","config":"[Xe] 4f¹⁴ 5d¹⁰ 6s² 6p³","electro":"2,02","density":"9,79","row":6,"col":15},
+            "Po":{"name":"Polonium","z":84,"p":84,"n":125,"mass":"209,0","class":"á kim","block":"p","config":"[Xe] 4f¹⁴ 5d¹⁰ 6s² 6p⁴","electro":"2,0","density":"9,2","row":6,"col":16},
+            "At":{"name":"Astatine","z":85,"p":85,"n":125,"mass":"210,0","class":"phi kim","block":"p","config":"[Xe] 4f¹⁴ 5d¹⁰ 6s² 6p⁵","electro":"2,2","density":"7,0","row":6,"col":17},
+            "Rn":{"name":"Radon","z":86,"p":86,"n":136,"mass":"222,0","class":"khí hiếm","block":"p","config":"[Xe] 4f¹⁴ 5d¹⁰ 6s² 6p⁶","electro":"2,2","density":"0,00973","row":6,"col":18},
+            "Fr":{"name":"Francium","z":87,"p":87,"n":136,"mass":"223,0","class":"kim loại kiềm","block":"s","config":"[Rn] 7s¹","electro":"0,7","density":"1,87","row":7,"col":1},
+            "Ra":{"name":"Radium","z":88,"p":88,"n":138,"mass":"226,0","class":"kim loại kiềm thổ","block":"s","config":"[Rn] 7s²","electro":"0,9","density":"5,5","row":7,"col":2},
+            "Ac":{"name":"Actinium","z":89,"p":89,"n":138,"mass":"227,0","class":"actini","block":"d","config":"[Rn] 6d¹ 7s²","electro":"1,1","density":"10,07","row":7,"col":3},
+            "Th":{"name":"Thorium","z":90,"p":90,"n":142,"mass":"232,038","class":"actini","block":"f","config":"[Rn] 6d² 7s²","electro":"1,3","density":"11,72","row":10,"col":3},
+            "Pa":{"name":"Protactinium","z":91,"p":91,"n":140,"mass":"231,036","class":"actini","block":"f","config":"[Rn] 5f² 6d¹ 7s²","electro":"1,5","density":"15,37","row":10,"col":4},
+            "U":{"name":"Uranium","z":92,"p":92,"n":146,"mass":"238,029","class":"actini","block":"f","config":"[Rn] 5f³ 6d¹ 7s²","electro":"1,38","density":"18,95","row":10,"col":5},
+            "Np":{"name":"Neptunium","z":93,"p":93,"n":144,"mass":"237,0","class":"actini","block":"f","config":"[Rn] 5f⁴ 6d¹ 7s²","electro":"1,36","density":"20,45","row":10,"col":6},
+            "Pu":{"name":"Plutonium","z":94,"p":94,"n":150,"mass":"244,0","class":"actini","block":"f","config":"[Rn] 5f⁶ 7s²","electro":"1,28","density":"19,84","row":10,"col":7},
+            "Am":{"name":"Americium","z":95,"p":95,"n":148,"mass":"243,0","class":"actini","block":"f","config":"[Rn] 5f⁷ 7s²","electro":"1,3","density":"13,69","row":10,"col":8},
+            "Cm":{"name":"Curium","z":96,"p":96,"n":151,"mass":"247,0","class":"actini","block":"f","config":"[Rn] 5f⁷ 6d¹ 7s²","electro":"1,3","density":"13,51","row":10,"col":9},
+            "Bk":{"name":"Berkelium","z":97,"p":97,"n":150,"mass":"247,0","class":"actini","block":"f","config":"[Rn] 5f⁹ 7s²","electro":"1,3","density":"14,79","row":10,"col":10},
+            "Cf":{"name":"Californium","z":98,"p":98,"n":153,"mass":"251,0","class":"actini","block":"f","config":"[Rn] 5f¹⁰ 7s²","electro":"1,3","density":"15,1","row":10,"col":11},
+            "Es":{"name":"Einsteinium","z":99,"p":99,"n":153,"mass":"252,0","class":"actini","block":"f","config":"[Rn] 5f¹¹ 7s²","electro":"1,3","density":"8,84","row":10,"col":12},
+            "Fm":{"name":"Fermium","z":100,"p":100,"n":157,"mass":"257,0","class":"actini","block":"f","config":"[Rn] 5f¹² 7s²","electro":"1,3","density":"-","row":10,"col":13},
+            "Md":{"name":"Mendelevium","z":101,"p":101,"n":157,"mass":"258,0","class":"actini","block":"f","config":"[Rn] 5f¹³ 7s²","electro":"1,3","density":"-","row":10,"col":14},
+            "No":{"name":"Nobelium","z":102,"p":102,"n":157,"mass":"259,0","class":"actini","block":"f","config":"[Rn] 5f¹⁴ 7s²","electro":"1,3","density":"-","row":10,"col":15},
+            "Lr":{"name":"Lawrencium","z":103,"p":103,"n":159,"mass":"262,0","class":"actini","block":"d","config":"[Rn] 5f¹⁴ 7s² 7p¹","electro":"1,3","density":"-","row":10,"col":16},
+            "Rf":{"name":"Rutherfordium","z":104,"p":104,"n":163,"mass":"267,0","class":"kim loại chuyển tiếp","block":"d","config":"[Rn] 5f¹⁴ 6d² 7s²","electro":"-","density":"-","row":7,"col":4},
+            "Db":{"name":"Dubnium","z":105,"p":105,"n":163,"mass":"268,0","class":"kim loại chuyển tiếp","block":"d","config":"[Rn] 5f¹⁴ 6d³ 7s²","electro":"-","density":"-","row":7,"col":5},
+            "Sg":{"name":"Seaborgium","z":106,"p":106,"n":165,"mass":"269,0","class":"kim loại chuyển tiếp","block":"d","config":"[Rn] 5f¹⁴ 6d⁴ 7s²","electro":"-","density":"-","row":7,"col":6},
+            "Bh":{"name":"Bohrium","z":107,"p":107,"n":163,"mass":"270,0","class":"kim loại chuyển tiếp","block":"d","config":"[Rn] 5f¹⁴ 6d⁵ 7s²","electro":"-","density":"-","row":7,"col":7},
+            "Hs":{"name":"Hassium","z":108,"p":108,"n":169,"mass":"269,0","class":"kim loại chuyển tiếp","block":"d","config":"[Rn] 5f¹⁴ 6d⁶ 7s²","electro":"-","density":"-","row":7,"col":8},
+            "Mt":{"name":"Meitnerium","z":109,"p":109,"n":169,"mass":"278,0","class":"đặc tính không xác định","block":"d","config":"[Rn] 5f¹⁴ 6d⁷ 7s²","electro":"-","density":"-","row":7,"col":9},
+            "Ds":{"name":"Darmstadtium","z":110,"p":110,"n":171,"mass":"281,0","class":"đặc tính không xác định","block":"d","config":"[Rn] 5f¹⁴ 6d⁸ 7s²","electro":"-","density":"-","row":7,"col":10},
+            "Rg":{"name":"Roentgenium","z":111,"p":111,"n":171,"mass":"282,0","class":"đặc tính không xác định","block":"d","config":"[Rn] 5f¹⁴ 6d⁹ 7s²","electro":"-","density":"-","row":7,"col":11},
+            "Cn":{"name":"Copernium","z":112,"p":112,"n":173,"mass":"285,0","class":"đặc tính không xác định","block":"d","config":"[Rn] 5f¹⁴ 6d¹⁰ 7s²","electro":"-","density":"-","row":7,"col":12},
+            "Nh":{"name":"Nihonium","z":113,"p":113,"n":173,"mass":"286,0","class":"đặc tính không xác định","block":"p","config":"[Rn] 5f¹⁴ 6d¹⁰ 7s² 7p¹","electro":"-","density":"-","row":7,"col":13},
+            "Fl":{"name":"Flerovium","z":114,"p":114,"n":175,"mass":"289,0","class":"kim loại hậu chuyển tiếp","block":"p","config":"[Rn] 5f¹⁴ 6d¹⁰ 7s² 7p²","electro":"-","density":"-","row":7,"col":14},
+            "Mc":{"name":"Moscovium","z":115,"p":115,"n":175,"mass":"290,0","class":"đặc tính không xác định","block":"p","config":"[Rn] 5f¹⁴ 6d¹⁰ 7s² 7p³","electro":"-","density":"-","row":7,"col":15},
+            "Lv":{"name":"Livermorium","z":116,"p":116,"n":177,"mass":"293,0","class":"đặc tính không xác định","block":"p","config":"[Rn] 5f¹⁴ 6d¹⁰ 7s² 7p⁴","electro":"-","density":"-","row":7,"col":16},
+            "Ts":{"name":"Tennessine","z":117,"p":117,"n":177,"mass":"294,0","class":"phi kim","block":"p","config":"[Rn] 5f¹⁴ 6d¹⁰ 7s² 7p⁵","electro":"-","density":"-","row":7,"col":17},
+            "Og":{"name":"Oganesson","z":118,"p":118,"n":176,"mass":"294,0","class":"khí hiếm","block":"p","config":"[Rn] 5f¹⁴ 6d¹⁰ 7s² 7p⁶","electro":"-","density":"-","row":7,"col":18}
+        };
+
+        // --- CƠ CHẾ ẨN / HIỆN BẢNG TUẦN HOÀN ---
+        let isPtableVisible = true;
+        function togglePtableBoard() {
+            const container = document.getElementById('ptable-container');
+            const btn = document.getElementById('toggle-ptable-btn');
+            isPtableVisible = !isPtableVisible;
+            
+            if (isPtableVisible) {
+                container.classList.remove('hidden-mode');
+                btn.innerText = "Ẩn Bảng Tuần Hoàn";
+                btn.style.background = "#fbbf24";
+            } else {
+                container.classList.add('hidden-mode');
+                btn.innerText = "Hiện Bảng Tuần Hoàn";
+                btn.style.background = "#4ade80";
+            }
+        }
+
+        // Tự động ẩn cưỡng bức khi click chọn nguyên tố
+        function forceHidePtableBoard() {
+            const container = document.getElementById('ptable-container');
+            const btn = document.getElementById('toggle-ptable-btn');
+            isPtableVisible = false;
+            container.classList.add('hidden-mode');
+            btn.innerText = "Hiện Bảng Tuần Hoàn";
+            btn.style.background = "#4ade80";
+        }
+
+        const grid = document.getElementById('elementGrid');
+        
+        // Khởi tạo ma trận nguyên tố
+        for (let r = 1; r <= 10; r++) {
+            for (let c = 1; c <= 18; c++) {
+                let foundKey = null;
+                for (let key in tableData118) {
+                    if (tableData118[key].row === r && tableData118[key].col === c) {
+                        foundKey = key;
+                        break;
+                    }
+                }
+
+                const cell = document.createElement('div');
+                if (foundKey) {
+                    const data = tableData118[foundKey];
+                    let cssClass = data.class.replace(/ /g, '-');
+                    if(cssClass === 'kim-loại-kiềm-thổ') cssClass = 'alkaline';
+                    else if(cssClass === 'kim-loại-kiềm') cssClass = 'alkali';
+                    else if(cssClass === 'kim-loại-chuyển-tiếp') cssClass = 'transition';
+                    else if(cssClass === 'kim-loại-hậu-chuyển-tiếp') cssClass = 'post-transition';
+                    else if(cssClass === 'á-kim') cssClass = 'metalloid';
+                    else if(cssClass === 'phi-kim') cssClass = 'nonmetal';
+                    else if(cssClass === 'khí-hiếm') cssClass = 'noble';
+                    else if(cssClass === 'đặc-tính-không-xác-định') cssClass = 'unknown';
+
+                    cell.className = `cell-element ${cssClass}`;
+                    cell.id = `cell-${foundKey}`;
+                    cell.setAttribute('data-category', data.class);
+                    cell.innerHTML = `<span class="z-idx">${data.z}</span>${foundKey}`;
+                    cell.onclick = () => selectElement(foundKey);
+                } else {
+                    cell.className = 'cell-element ghost';
+                }
+                grid.appendChild(cell);
+            }
+        }
+
+        // Hàm lọc danh mục nhận sự kiện đổi active class chính xác
+        function filterCategory(catName, event) {
+            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active-filter'));
+            if(event) {
+                event.currentTarget.classList.add('active-filter');
+            }
+
+            const allCells = document.querySelectorAll('.cell-element:not(.ghost)');
+            allCells.forEach(cell => {
+                const elementCat = cell.getAttribute('data-category');
+                if (catName === 'all' || elementCat === catName) {
+                    cell.classList.remove('dimmed');
+                } else {
+                    cell.classList.add('dimmed');
+                }
+            });
+
+            nucleusGroup.children.forEach(mesh => {
+                if (catName === 'all' || mesh.userData.category === catName) {
+                    mesh.material.opacity = 1.0;
+                    mesh.material.transparent = false;
+                } else {
+                    mesh.material.opacity = 0.15;
+                    mesh.material.transparent = true;
+                }
+            });
+        }
+
+        // --- HỆ THỐNG ĐIỀU KHIỂN VẬN TỐC TỈ LỆ THUẬN (%) ---
+        let speedPercent = 100;
+        const BASE_V_ELECTRON = 2180000; 
+        const BASE_V_NUCLEUS = 12;
+
+        const eBaseSpeedFactor = 0.00000002;
+        const nBaseSpeedFactor = 0.0015;
+
+        const mainSlider = document.getElementById('globalSpeedSlider');
+        const percentLabel = document.getElementById('percentLabel');
+        const showVElectron = document.getElementById('vElectronShow');
+        const showVNucleus = document.getElementById('vNucleusShow');
+        const inputVElectron = document.getElementById('inputVElectron');
+        const inputVNucleus = document.getElementById('inputVNucleus');
+
+        function updateSimulationSpeeds() {
+            let currentVElectron = (BASE_V_ELECTRON * speedPercent) / 100;
+            let currentVNucleus = (BASE_V_NUCLEUS * speedPercent) / 100;
+
+            percentLabel.innerText = `${speedPercent}%`;
+            showVElectron.innerText = Math.round(currentVElectron).toLocaleString('vi-VN') + " m/s";
+            showVNucleus.innerText = currentVNucleus.toFixed(1) + " vòng/s";
+
+            inputVElectron.value = Math.round(currentVElectron);
+            inputVNucleus.value = parseFloat(currentVNucleus.toFixed(2));
+
+            electronMeshes.forEach(e => {
+                e.speed = currentVElectron * eBaseSpeedFactor / (e.shellIndex + 1);
+            });
+        }
+
+        mainSlider.addEventListener('input', (e) => {
+            speedPercent = parseInt(e.target.value);
+            updateSimulationSpeeds();
+        });
+
+        inputVElectron.addEventListener('input', (e) => {
+            let val = parseFloat(e.target.value) || 0;
+            speedPercent = Math.min(Math.max(Math.round((val / BASE_V_ELECTRON) * 100), 0), 200);
+            mainSlider.value = speedPercent;
+            updateSimulationSpeeds();
+        });
+
+        inputVNucleus.addEventListener('input', (e) => {
+            let val = parseFloat(e.target.value) || 0;
+            speedPercent = Math.min(Math.max(Math.round((val / BASE_V_NUCLEUS) * 100), 0), 200);
+            mainSlider.value = speedPercent;
+            updateSimulationSpeeds();
+        });
+
+
+        // --- ENGINE ĐỒ HỌA THREE.JS 3D ---
+        let scene, camera, renderer, controls, nucleusGroup, electronGroup;
+        let electronMeshes = [];
+
+        init3D();
+        animate3D();
+
+        function init3D() {
+            scene = new THREE.Scene();
+            
+            camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 8000);
+            camera.position.set(0, 200, 850);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.body.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.07;
+            controls.minDistance = 40;
+            controls.maxDistance = 2800;
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
+            scene.add(ambientLight);
+
+            const pointLight = new THREE.PointLight(0xffffff, 2.5, 2500);
+            pointLight.position.set(400, 600, 400);
+            scene.add(pointLight);
+
+            nucleusGroup = new THREE.Group();
+            scene.add(nucleusGroup);
+
+            electronGroup = new THREE.Group();
+            scene.add(electronGroup);
+
+            selectElement('Au'); 
+            updateSimulationSpeeds(); 
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }, false);
+        }
+
+        function selectElement(key) {
+            document.querySelectorAll('.cell-element').forEach(el => el.classList.remove('selected-active'));
+            const activeCell = document.getElementById(`cell-${key}`);
+            if(activeCell) activeCell.classList.add('selected-active');
+            
+            renderAtomModel(key);
+            
+            // THAY ĐỔI: Tự động ẩn bảng sau khi dựng xong mô hình
+            forceHidePtableBoard();
+        }
+
+        function renderAtomModel(elementKey) {
+            const data = tableData118[elementKey];
+            if (!data) return;
+
+            while(nucleusGroup.children.length > 0) nucleusGroup.remove(nucleusGroup.children[0]);
+            while(electronGroup.children.length > 0) electronGroup.remove(electronGroup.children[0]);
+            electronMeshes = [];
+
+            document.getElementById('lblSym').innerText = elementKey;
+            document.getElementById('lblName').innerText = data.name;
+            document.getElementById('lblZ').innerText = data.z;
+            document.getElementById('lblClass').innerText = data.class.toUpperCase();
+            document.getElementById('lblMass').innerText = data.mass;
+            document.getElementById('lblElectro').innerText = data.electro;
+            document.getElementById('lblDensity').innerText = data.density !== '-' ? `${data.density} g/cm³` : '-';
+            document.getElementById('lblBlock').innerText = `${data.block}-block`;
+            document.getElementById('lblConfig').innerText = data.config;
+            document.getElementById('lblPN').innerText = `${data.p} Proton / ${data.n} Neutron`;
+
+            const totalNucleons = data.p + data.n;
+            
+            let particleRadius = 5.0;
+            if(totalNucleons > 200) particleRadius = 1.9;
+            else if(totalNucleons > 100) particleRadius = 2.6;
+            else if(totalNucleons > 40) particleRadius = 3.6;
+
+            const protonMat = new THREE.MeshPhongMaterial({ color: 0xef4444, emissive: 0x991b1b, emissiveIntensity: 0.4, specular: 0xffffff, shininess: 30 });
+            const neutronMat = new THREE.MeshPhongMaterial({ color: 0x64748b, emissive: 0x334155, emissiveIntensity: 0.2, specular: 0xffffff, shininess: 10 });
+            const particleGeo = new THREE.SphereGeometry(particleRadius, 12, 12);
+
+            let particles = [];
+            for (let i = 0; i < data.p; i++) particles.push({ mat: protonMat });
+            for (let i = 0; i < data.n; i++) particles.push({ mat: neutronMat });
+            particles.sort(() => Math.random() - 0.5);
+
+            particles.forEach((p, i) => {
+                const mesh = new THREE.Mesh(particleGeo, p.mat);
+                mesh.userData = { category: data.class };
+                
+                const offset = 2 / totalNucleons;
+                const increment = Math.PI * (3 - Math.sqrt(5));
+                const y = ((i * offset) - 1) + (offset / 2);
+                const r = Math.sqrt(1 - Math.pow(y, 2));
+                const phi = i * increment;
+                
+                let scaleRadius = 5 + Math.pow(totalNucleons, 1/3) * 5.2;
+                if(totalNucleons > 150) scaleRadius = 4 + Math.pow(totalNucleons, 1/3) * 3.8;
+
+                mesh.position.x = Math.cos(phi) * r * scaleRadius;
+                mesh.position.y = y * scaleRadius;
+                mesh.position.z = Math.sin(phi) * r * scaleRadius;
+                nucleusGroup.add(mesh);
+            });
+
+            const electronMat = new THREE.MeshBasicMaterial({ color: 0x00f3ff });
+            const electronGeo = new THREE.SphereGeometry(totalNucleons > 100 ? 1.8 : 3.0, 12, 12);
+            
+            let shellCount = data.row;
+            let currentRadius = totalNucleons > 100 ? 150 : 90;
+            let electronsPerShell = Math.ceil(data.z / shellCount);
+
+            let currentVElectron = (BASE_V_ELECTRON * speedPercent) / 100;
+
+            for(let s = 0; s < shellCount; s++) {
+                const ringGeo = new THREE.TorusGeometry(currentRadius, 0.25, 6, 100);
+                const ringMat = new THREE.MeshBasicMaterial({ color: 0xe2e8f0, transparent: true, opacity: 0.25 });
+                const orbitRing = new THREE.Mesh(ringGeo, ringMat);
+                
+                orbitRing.rotation.x = Math.random() * Math.PI;
+                orbitRing.rotation.y = Math.random() * Math.PI;
+                electronGroup.add(orbitRing);
+
+                let eInThisShell = (s === shellCount - 1) ? (data.z - (electronsPerShell * s)) : electronsPerShell;
+                if(eInThisShell <= 0) eInThisShell = 1;
+
+                for (let i = 0; i < eInThisShell; i++) {
+                    const eMesh = new THREE.Mesh(electronGeo, electronMat);
+                    orbitRing.add(eMesh); 
+
+                    electronMeshes.push({
+                        mesh: eMesh,
+                        angle: (Math.PI * 2 / eInThisShell) * i,
+                        speed: currentVElectron * eBaseSpeedFactor / (s + 1), 
+                        shellIndex: s,
+                        radius: currentRadius
+                    });
+                }
+                currentRadius += totalNucleons > 100 ? 35 : 45;
+            }
+        }
+
+        function animate3D() {
+            requestAnimationFrame(animate3D);
+            controls.update();
+
+            let currentVNucleus = (BASE_V_NUCLEUS * speedPercent) / 100;
+            let nSpeed = currentVNucleus * nBaseSpeedFactor;
+            
+            nucleusGroup.rotation.y += nSpeed;
+            nucleusGroup.rotation.x += nSpeed * 0.5;
+
+            electronMeshes.forEach(e => {
+                e.angle += e.speed;
+                e.mesh.position.x = Math.cos(e.angle) * e.radius;
+                e.mesh.position.y = Math.sin(e.angle) * e.radius;
+                e.mesh.position.z = 0; 
+            });
+
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
